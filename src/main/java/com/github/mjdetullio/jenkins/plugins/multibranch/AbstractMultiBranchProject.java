@@ -68,6 +68,7 @@ import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.NameFileFilter;
 import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.HttpRedirect;
 import org.kohsuke.stapler.HttpResponse;
 import org.kohsuke.stapler.QueryParameter;
@@ -190,19 +191,19 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     }
 
     private void runSubProjectDisplayNameMigration() {
-//        for (P project : getItems()) {
-//            String projectName = project.getName();
-//            String projectNameDecoded = projectName;
+        for (P project : getItems()) {
+            String projectName = project.getName();
+            String projectNameDecoded = StringUtils.replace(projectName, "-", "/");
 
-//            if (!projectName.equals(projectNameDecoded)
-//                    && project.getDisplayNameOrNull() == null) {
-//                try {
-//                    project.setDisplayName(projectNameDecoded);
-//                } catch (IOException e) {
-//                    LOGGER.log(Level.WARNING, "Failed to update display name for project " + projectName, e);
-//                }
-//            }
-//        }
+            if (!projectName.equals(projectNameDecoded)
+                    && project.getDisplayNameOrNull() == null) {
+                try {
+                    project.setDisplayName(projectNameDecoded);
+                } catch (IOException e) {
+                    LOGGER.log(Level.WARNING, "Failed to update display name for project " + projectName, e);
+                }
+            }
+        }
     }
 
     private void runDisabledSubProjectNameMigration() throws IOException {
@@ -217,7 +218,7 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
             if (getItem(disabledSubProject) == null) {
                 // Didn't find item, so don't add it to new list
                 // Do we have the encoded item though?
-                String encoded = disabledSubProject;
+                String encoded = StringUtils.replace(disabledSubProject, "/", "-");
 
                 if (getItem(encoded) != null) {
                     // Found encoded item, add encoded name to new list
@@ -583,7 +584,7 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
 
         for (SCMHead head : heads) {
             String branchName = head.getName();
-            String branchNameEncoded = branchName;
+            String branchNameEncoded = StringUtils.replace(branchName, "/", "-");
 
             listener.getLogger().println("Branch " + branchName + " encoded to " + branchNameEncoded);
 
@@ -618,11 +619,11 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
                 // Work-around for JENKINS-21017
                 project.setCustomWorkspace(templateProject.getCustomWorkspace());
 
-//                if (branchName.equals(branchNameEncoded)) {
+                if (branchName.equals(branchNameEncoded)) {
                     project.setDisplayName(null);
-//                } else {
-//                    project.setDisplayName(branchName);
-//                }
+                } else {
+                    project.setDisplayName(branchName);
+                }
 
                 project.enable();
 
@@ -992,6 +993,46 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
         return descriptors;
     }
 
+    /**
+     * Inverse function of {@link hudson.Util#rawEncode(String)}.
+     * <br>
+     * Kanged from Branch API.
+     *
+     * @param s the encoded string.
+     * @return the decoded string.
+     */
+    public static String rawDecode(String s) {
+        final byte[] bytes; // should be US-ASCII but we can be tolerant
+        try {
+            bytes = s.getBytes("UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException("JLS specification mandates UTF-8 as a supported encoding", e);
+        }
+
+        final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        for (int i = 0; i < bytes.length; i++) {
+            final int b = bytes[i];
+            if (b == '%' && i + 2 < bytes.length) {
+                final int u = Character.digit((char) bytes[++i], 16);
+                final int l = Character.digit((char) bytes[++i], 16);
+
+                if (u != -1 && l != -1) {
+                    buffer.write((char) ((u << 4) + l));
+                    continue;
+                }
+
+                // should be a valid encoding but we can be tolerant
+                i -= 2;
+            }
+            buffer.write(b);
+        }
+
+        try {
+            return new String(buffer.toByteArray(), "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new IllegalStateException("JLS specification mandates UTF-8 as a supported encoding", e);
+        }
+    }
 
     /**
      * Triggered by different listeners to enforce state for multi-branch projects and their sub-projects.
