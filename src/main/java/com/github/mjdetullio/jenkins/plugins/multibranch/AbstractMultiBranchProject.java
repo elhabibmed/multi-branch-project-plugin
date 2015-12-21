@@ -605,6 +605,8 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
 
                 listener.getLogger().println("Syncing config from template to branch " + branchNameEncoded);
 
+                boolean wasDisabled = project.isDisabled();
+
                 project.updateByXml((Source) new StreamSource(templateProject.getConfigFile().readRaw()));
 
                 /*
@@ -625,7 +627,9 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
                     project.setDisplayName(branchName);
                 }
 
-                project.enable();
+                if (!wasDisabled) {
+                    project.enable();
+                }
 
                 observer.created(project);
             } catch (Throwable e) {
