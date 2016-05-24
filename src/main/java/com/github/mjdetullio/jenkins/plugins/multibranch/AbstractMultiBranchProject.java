@@ -36,12 +36,13 @@ import hudson.init.InitMilestone;
 import hudson.init.Initializer;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
-import hudson.model.BallColor;
 import hudson.model.Descriptor;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
 import hudson.model.Items;
+import hudson.model.Job;
 import hudson.model.Result;
+import hudson.model.Run;
 import hudson.model.Saveable;
 import hudson.model.TaskListener;
 import hudson.model.TopLevelItem;
@@ -590,13 +591,13 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
 
             P project = observer.shouldUpdate(branchNameEncoded);
 
-            if (!observer.mayCreate(branchNameEncoded)) {
-                listener.getLogger().println("Ignoring duplicate " + branchNameEncoded);
-                continue;
-            }
-
             try {
                 if (project == null) {
+                    if (!observer.mayCreate(branchNameEncoded)) {
+                        listener.getLogger().println("Skipping creation for '" + branchNameEncoded + "' - mayCreate returned false");
+                        continue;
+                    }
+
                     listener.getLogger().println("Creating project for branch " + branchNameEncoded);
 
                     project = createNewSubProject(this, branchNameEncoded);
@@ -654,49 +655,17 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     }
 
     /**
-     * Used as the color of the status ball for the project.
-     * <br>
-     * Kanged from Branch API.
-     *
-     * @return the color of the status ball for the project.
-     */
-    @Nonnull
-    public BallColor getBallColor() {
-        if (isDisabled()) {
-            return BallColor.DISABLED;
-        }
-
-        BallColor c = BallColor.DISABLED;
-        boolean animated = false;
-
-        for (P item : getItems()) {
-            BallColor d = item.getIconColor();
-            animated |= d.isAnimated();
-            d = d.noAnime();
-            if (d.compareTo(c) < 0) {
-                c = d;
-            }
-        }
-
-        if (animated) {
-            c = c.anime();
-        }
-
-        return c;
-    }
-
-    /**
      * Returns the last build.
      *
-     * @return B - the build or null
+     * @return the build or null
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getLastBuild() {
-        B retVal = null;
-        for (P item : getItems()) {
-            retVal = takeLast(retVal, item.getLastBuild());
+    public Run getLastBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            retVal = takeLast(retVal, job.getLastBuild());
         }
         return retVal;
     }
@@ -704,19 +673,17 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     /**
      * Returns the oldest build in the record.
      *
-     * @return B - the build or null
+     * @return the build or null
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getFirstBuild() {
-        B retVal = null;
-
-        for (P item : getItems()) {
-            B b = item.getFirstBuild();
-
-            if (b != null && (retVal == null || b.getTimestamp().before(retVal.getTimestamp()))) {
-                retVal = b;
+    public Run getFirstBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            Run run = job.getFirstBuild();
+            if (run != null && (retVal == null || run.getTimestamp().before(retVal.getTimestamp()))) {
+                retVal = run;
             }
         }
 
@@ -727,16 +694,16 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
      * Returns the last successful build, if any. Otherwise null. A successful build would include
      * either {@link Result#SUCCESS} or {@link Result#UNSTABLE}.
      *
-     * @return B - the build or null
+     * @return the build or null
      * @see #getLastStableBuild()
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getLastSuccessfulBuild() {
-        B retVal = null;
-        for (P item : getItems()) {
-            retVal = takeLast(retVal, item.getLastSuccessfulBuild());
+    public Run getLastSuccessfulBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            retVal = takeLast(retVal, job.getLastSuccessfulBuild());
         }
         return retVal;
     }
@@ -744,16 +711,16 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     /**
      * Returns the last build that was anything but stable, if any. Otherwise null.
      *
-     * @return B - the build or null
+     * @return the build or null
      * @see #getLastSuccessfulBuild
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getLastUnsuccessfulBuild() {
-        B retVal = null;
-        for (P item : getItems()) {
-            retVal = takeLast(retVal, item.getLastUnsuccessfulBuild());
+    public Run getLastUnsuccessfulBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            retVal = takeLast(retVal, job.getLastUnsuccessfulBuild());
         }
         return retVal;
     }
@@ -761,16 +728,16 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     /**
      * Returns the last unstable build, if any. Otherwise null.
      *
-     * @return B - the build or null
+     * @return the build or null
      * @see #getLastSuccessfulBuild
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getLastUnstableBuild() {
-        B retVal = null;
-        for (P item : getItems()) {
-            retVal = takeLast(retVal, item.getLastUnstableBuild());
+    public Run getLastUnstableBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            retVal = takeLast(retVal, job.getLastUnstableBuild());
         }
         return retVal;
     }
@@ -778,16 +745,16 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     /**
      * Returns the last stable build, if any. Otherwise null.
      *
-     * @return B - the build or null
+     * @return the build or null
      * @see #getLastSuccessfulBuild
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getLastStableBuild() {
-        B retVal = null;
-        for (P item : getItems()) {
-            retVal = takeLast(retVal, item.getLastStableBuild());
+    public Run getLastStableBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            retVal = takeLast(retVal, job.getLastStableBuild());
         }
         return retVal;
     }
@@ -795,15 +762,15 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     /**
      * Returns the last failed build, if any. Otherwise null.
      *
-     * @return B - the build or null
+     * @return the build or null
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getLastFailedBuild() {
-        B retVal = null;
-        for (P item : getItems()) {
-            retVal = takeLast(retVal, item.getLastFailedBuild());
+    public Run getLastFailedBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            retVal = takeLast(retVal, job.getLastFailedBuild());
         }
         return retVal;
     }
@@ -811,25 +778,25 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     /**
      * Returns the last completed build, if any. Otherwise null.
      *
-     * @return B - the build or null
+     * @return the build or null
      */
     @SuppressWarnings(UNUSED)
     @CheckForNull
     @Exported
-    public B getLastCompletedBuild() {
-        B retVal = null;
-        for (P item : getItems()) {
-            retVal = takeLast(retVal, item.getLastCompletedBuild());
+    public Run getLastCompletedBuild() {
+        Run retVal = null;
+        for (Job job : getAllJobs()) {
+            retVal = takeLast(retVal, job.getLastCompletedBuild());
         }
         return retVal;
     }
 
     @CheckForNull
-    private B takeLast(B b1, B b2) {
-        if (b2 != null && (b1 == null || b2.getTimestamp().after(b1.getTimestamp()))) {
-            return b2;
+    private Run takeLast(Run run1, Run run2) {
+        if (run2 != null && (run1 == null || run2.getTimestamp().after(run1.getTimestamp()))) {
+            return run2;
         }
-        return b1;
+        return run1;
     }
 
     /**
@@ -967,7 +934,9 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     }
 
     /**
-     * Returns a list of ViewDescriptors that we want to use for this project type.  Used by newView.jelly.
+     * Returns a list of {@link ViewDescriptor}s that we want to use for this project type.  Used by newView.jelly.
+     *
+     * @return list of {@link ViewDescriptor}s that we want to use for this project type
      */
     @SuppressWarnings(UNUSED)
     public static List<ViewDescriptor> getViewDescriptors() {
@@ -976,8 +945,11 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     }
 
     /**
-     * Returns a list of SCMSourceDescriptors that we want to use for this project type.
-     * Used by configure-entries.jelly.
+     * Returns a list of {@link SCMSourceDescriptor}s that we want to use for this project type.
+     * Used by configure-scm.jelly.
+     *
+     * @param onlyUserInstantiable {@code true} if only those descriptors that are {@link SCMSourceDescriptor#isUserInstantiable()}.
+     * @return list of {@link SCMSourceDescriptor}s that we want to use for this project type
      */
     public static List<SCMSourceDescriptor> getSCMSourceDescriptors(boolean onlyUserInstantiable) {
         List<SCMSourceDescriptor> descriptors =
@@ -1108,9 +1080,11 @@ public abstract class AbstractMultiBranchProject<P extends AbstractProject<P, B>
     }
 
     /**
-     * Migrates <code>SyncBranchesTrigger</code> to {@link hudson.triggers.TimerTrigger} and copies the
-     * template's {@link hudson.security.AuthorizationMatrixProperty} to the parent as a
-     * {@link com.cloudbees.hudson.plugins.folder.properties.AuthorizationMatrixProperty}.
+     * Migrates {@code SyncBranchesTrigger} to {@link hudson.triggers.TimerTrigger} and copies the
+     * template's {@code hudson.security.AuthorizationMatrixProperty} to the parent as a
+     * {@code com.cloudbees.hudson.plugins.folder.properties.AuthorizationMatrixProperty}.
+     *
+     * @throws IOException if errors reading/modifying files during migration
      */
     @SuppressWarnings(UNUSED)
     @Initializer(before = InitMilestone.PLUGINS_STARTED)
